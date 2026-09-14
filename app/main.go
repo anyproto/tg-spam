@@ -553,6 +553,7 @@ func execute(ctx context.Context, settings *config.Settings, reloadNormalize fun
 		WarnWindow:              settings.Warn.Window,
 		Warnings:                warningsStore,
 		AdmitDocuments:          settings.Meta.DocumentsOnly,
+		AdmitContacts:           settings.Meta.ContactOnly,
 	}
 
 	if settings.Delete.JoinMessages {
