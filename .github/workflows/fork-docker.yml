@@ -1,0 +1,53 @@
+# fork-only image build. upstream's docker.yml publishes to ghcr.io/${{ github.actor }} and docker.io
+# using PKG_TOKEN/DOCKER_HUB_TOKEN, and pings upstream's deploy hook on release tags; none of that works
+# or is wanted here. this builds the fork's own image with the default GITHUB_TOKEN instead.
+#
+# triggered by pushing a tag named fork-*, e.g. fork-v1.27.0-contacts1 -> ghcr.io/anyproto/tg-spam:v1.27.0-contacts1
+# the fork- prefix matters: upstream's docker.yml fires on any ref starting with "v", so a bare v* tag
+# would start that workflow too and fail on the missing secrets.
+name: fork-docker
+
+on:
+  push:
+    tags: ["fork-*"]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: checkout
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - name: set image tag
+        id: meta
+        run: echo "tag=${GITHUB_REF_NAME#fork-}" >> $GITHUB_OUTPUT
+
+      - name: set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: login to ghcr.io
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: build and push
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          platforms: linux/amd64
+          push: true
+          build-args: |
+            CI=github
+            GITHUB_SHA=${{ github.sha }}
+            GIT_BRANCH=${{ steps.meta.outputs.tag }}
+          tags: ghcr.io/anyproto/tg-spam:${{ steps.meta.outputs.tag }}
