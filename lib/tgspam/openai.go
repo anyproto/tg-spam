@@ -128,13 +128,19 @@ func (o *openAIChecker) buildSystemPrompt() string {
 }
 
 // isReasoningModel checks if the model requires MaxCompletionTokens instead of MaxTokens
-// this includes o1-series models and gpt-5 models
+// this includes o1-series models, gpt-5 and gpt-6 models
 func (o *openAIChecker) isReasoningModel() bool {
 	modelLower := strings.ToLower(o.params.Model)
 	return strings.HasPrefix(modelLower, "o1") ||
 		strings.HasPrefix(modelLower, "o3") ||
 		strings.HasPrefix(modelLower, "o4") ||
-		strings.Contains(modelLower, "gpt-5")
+		strings.Contains(modelLower, "gpt-5") ||
+		o.isGPT6Model()
+}
+
+// isGPT6Model checks if the model belongs to the gpt-6 family, which reasons at medium effort unless told otherwise
+func (o *openAIChecker) isGPT6Model() bool {
+	return strings.Contains(strings.ToLower(o.params.Model), "gpt-6")
 }
 
 func (o *openAIChecker) sendRequest(ctx context.Context, msg string) (response llmResponse, err error) {
@@ -195,9 +201,13 @@ func (o *openAIChecker) sendRequest(ctx context.Context, msg string) (response l
 		request.MaxTokens = o.params.MaxTokensResponse
 	}
 
-	// add reasoning_effort parameter if set and not "none"
-	if o.params.ReasoningEffort != "" && o.params.ReasoningEffort != "none" {
+	// add reasoning_effort parameter if set and not "none". gpt-6 models default to medium effort when the
+	// parameter is omitted, so for them "none" (and unset) is sent explicitly to actually disable thinking
+	switch {
+	case o.params.ReasoningEffort != "" && o.params.ReasoningEffort != "none":
 		request.ReasoningEffort = o.params.ReasoningEffort
+	case o.isGPT6Model():
+		request.ReasoningEffort = "none"
 	}
 
 	resp, err := o.client.CreateChatCompletion(

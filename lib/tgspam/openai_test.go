@@ -324,6 +324,36 @@ func TestReasoningEffortInRequest(t *testing.T) {
 	}
 }
 
+func TestReasoningEffortGPT6(t *testing.T) {
+	tests := []struct {
+		name   string
+		effort string
+		want   string
+	}{
+		{name: "unset sends none", effort: "", want: "none"},
+		{name: "none sends none", effort: "none", want: "none"},
+		{name: "low passes through", effort: "low", want: "low"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var captured openai.ChatCompletionRequest
+			clientMock := &mocks.OpenAIClientMock{
+				CreateChatCompletionFunc: func(ctx context.Context, req openai.ChatCompletionRequest) (openai.ChatCompletionResponse, error) {
+					captured = req
+					return openai.ChatCompletionResponse{Choices: []openai.ChatCompletionChoice{{
+						Message: openai.ChatCompletionMessage{Content: `{"spam": false, "reason":"test", "confidence":90}`},
+					}}}, nil
+				},
+			}
+			checker := newOpenAIChecker(clientMock, OpenAIConfig{Model: "gpt-6-luna", ReasoningEffort: tt.effort})
+			checker.check(context.Background(), "test message", nil)
+			require.Equal(t, tt.want, captured.ReasoningEffort)
+			require.NotZero(t, captured.MaxCompletionTokens)
+			require.Zero(t, captured.MaxTokens)
+		})
+	}
+}
+
 func TestBuildSystemPromptWithCustomPrompts(t *testing.T) {
 	tests := []struct {
 		name          string
@@ -452,6 +482,8 @@ func TestIsReasoningModel(t *testing.T) {
 		{name: "gpt-5-mini", model: "gpt-5-mini", expected: true},
 		{name: "gpt-5-turbo", model: "gpt-5-turbo", expected: true},
 		{name: "GPT-5", model: "GPT-5", expected: true},
+		{name: "gpt-6-luna", model: "gpt-6-luna", expected: true},
+		{name: "GPT-6-Terra", model: "GPT-6-Terra", expected: true},
 		{name: "O1-MINI", model: "O1-MINI", expected: true},
 	}
 
